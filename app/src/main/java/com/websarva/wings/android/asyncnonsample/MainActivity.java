@@ -1,26 +1,27 @@
 package com.websarva.wings.android.asyncnonsample;
 
-
 import androidx.annotation.UiThread;
 import androidx.annotation.WorkerThread;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.os.HandlerCompat;
 
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
+
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.concurrent.Callable;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class MainActivity extends AppCompatActivity {
 
     @Override
+    @UiThread
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
@@ -45,45 +46,22 @@ public class MainActivity extends AppCompatActivity {
         }catch (Exception ex){}
     }
 
-    private class Receiver implements Runnable{
-        private final Handler _handler;
-
-        //コンストラクタでhandlerオブジェクトを取得
-        public Receiver(Handler handler){
-            _handler = handler;
-        }
+    private class Receiver implements Callable<String> {
 
         @WorkerThread
         @Override
-        public void run() {
-            SleepMethod();
+        public String call() {
             //UIスレッドに渡すデータ
             String result = "ワーカースレッドで5秒経過";
-            //コンストラクタの引数にUIスレッドに渡すデータを入れる
-            Poster poster = new Poster(result);
-            //UIスレッドのLooperにHandlerを使って処理を送る
-            _handler.post(poster);
+            //5秒待つ版
+            SleepMethod();
+            //時間稼ぎ版
+            //for(int i= 0; i < 10000; i++){
+            //    System.out.println(i);
+            //}
+            return result;
         }
     }
-
-    private class Poster implements Runnable{
-
-        private final String _result;
-
-        //コンストラクタでワーカースレッドから送られてきたデータを取得
-        public Poster(String result){
-            _result = result;
-        }
-
-        @UiThread
-        @Override
-        public void run() {
-            //TextViewにワーカースレッドから送られてきたデータを表示
-            TextView tvMsg = findViewById(R.id.tvMsg);
-            tvMsg.setText(_result);
-        }
-    }
-
 
     //同期ボタン
     private class SyncClickListener implements View.OnClickListener {
@@ -98,14 +76,23 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onClick(View view) {
 
-            //Looperオブジェクトの取得
-            Looper mainLooper = Looper.getMainLooper();
-            //LooperにバインドしたHandlerオブジェクトの作成
-            Handler handler = HandlerCompat.createAsync(mainLooper);
-
-            Receiver receiver = new Receiver(handler);
+            Receiver receiver = new Receiver();
             ExecutorService executorService = Executors.newSingleThreadExecutor();
-            executorService.submit(receiver);
+            Future<String> future = executorService.submit(receiver);
+
+            String result ="";
+
+            try{
+                //ワーカースレッドからのリターンを待つ
+                result = future.get();
+            }
+            catch (Exception ex){
+                Log.w("DEBUG_TAG", "非同期処理の例外発生", ex);
+            }
+
+            TextView tvMsg = findViewById(R.id.tvMsg);
+            tvMsg.setText(result);
+
         }
     }
 
